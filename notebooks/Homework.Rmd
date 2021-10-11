@@ -1,0 +1,89 @@
+---
+title: "Homework"
+subtitle: 'Data frames'
+author: "Szymon Talaga and Mikołaj Biesaga"
+affiliation: "Robert Zajonc Institute for Social Studies"
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    style: TRUE
+    tidyverse_quiet: TRUE
+    std_out_err: TRUE
+    session_info: TRUE
+    comment: "#"
+knit: reprex::reprex_render
+---
+
+## Introduction
+
+We are aware of the fact that these tasks might be difficult. We do not expect
+you to know the answer right away. First, you should try to review the
+`SocEli-0.Rmd` and the beginning of the `SocEli-1.Rmd` we covered on Friday. And
+afterward, just try to look for the solution online. It might be either in the
+books we recommend to you or just on StackOverflow.
+
+```{r loadLibraries}
+library(tidyverse) ## every time we open RStudio we should load libraries we are going to use
+```
+
+## Task 1
+
+From the `iris` data set extract column `species` and assign it to the object
+called `species_v`. Create a new vector that instead of setosa would have red,
+versicolor -- green, and virginica -- blue.
+
+
+```{r recodeIris}
+## WRITE YOUR ANSWER HERE
+```
+
+## Task 2
+
+Imagine that you have a data set with two columns. The first indicates whether
+the person got the first dose of coronavirus vaccine and the second if got a
+second jab. You would like to talk to all people who were vaccinated at least
+with one doze. You don't care whether it was the first or second jab, or did
+they are fully vaccinated or not. Count the number of interviews you are meant
+to schedule.
+
+```{r vaccination}
+set.seed(42) ## this is important because below we use a pseudorandomization function -- sample(). It draws in random order 100 times from a vector c(TRUE, FALSE, NA) with replacement. We want to make sure that for all of us it will draw in exactly the same order. Therefore, we tell R that it should use a build-in Random Number Generation in the specific state (the number we put as an argument in the function does not matter while we all have the same). Try commenting out this function and running the code a few times. What is the difference?
+
+## Data set
+df_vaccination <- tibble( 'first' = sample(c(TRUE,FALSE), 100, replace = TRUE),
+                          'second' = sample(c(TRUE, FALSE, NA), 100, replace = TRUE))
+
+## WRITE YOUR ANSWER HERE
+```
+
+## Task 3
+
+Now you have similar data set as in the previous task but you would like to
+understand why people did not take the vaccines. Count the number of interviews.
+
+```{r vaccinationRefuse}
+set.seed(92210) ## Let's not make it trivial and change the data a bit
+
+## Data set
+df_vaccination <- tibble( 'first' = sample(c(TRUE,FALSE), 100, replace = TRUE),
+                          'second' = sample(c(TRUE, FALSE, NA), 100, replace = TRUE))
+
+## WRITE YOUR ANSWER HERE
+```
+
+## Task 4
+
+Imagine that you are the Minister of Education in Poland (trust me for sure you
+are qualified and being fluent in Polish is not necessary). One day you got the
+result of the final exam in Math every student in Poland takes at the end of
+high school. You would like to know how many people got more than 90 points out
+of 100.
+
+```{r vectorCount}
+set.seed(314)
+## A very long vector with results
+vector_c <- sample(c(1:100), 100000, replace = TRUE)
+
+## WRITE YOUR ANSWER HERE
+```

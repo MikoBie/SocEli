@@ -1,0 +1,483 @@
+---
+title: "Data manipulation and data visualisation"
+subtitle: 'Data frames'
+author: "Szymon Talaga and Mikołaj Biesaga"
+affiliation: "Robert Zajonc Institute for Social Studies"
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    style: TRUE
+    tidyverse_quiet: TRUE
+    std_out_err: TRUE
+    session_info: TRUE
+    comment: "#"
+knit: reprex::reprex_render
+---
+
+## Introduction
+
+In this notebook, we will focus more on data frames and a tidy approach to data
+processing. Therefore, we will use already existing functions and packages.
+However, let's first understand what we mean by functions and packages.
+
+* `function` in most programming languages is understood very similarly to a
+mathematical function. It is a piece of code that performs a specific task. It
+can be called and reused multiple times. We have already used a bunch of
+different functions, for example `head()` and `tail()`
+* `package` is a code that bundles together functions, data, and documentation
+in standardized collection format.
+
+## Load packages
+
+We will use only one external package today. However, regardless of how many you
+use the good practice is to load all of them in one of the very first chunks of
+code.
+
+```{r loadLibraries}
+library(tidyverse) ## load library for data processing
+```
+
+## Data manipulation with `dplyr`
+
+Data wrangling or data manipulation is a very time-consuming process. Usually,
+when you try to perform some statistical analysis you spend most of the time
+trying to either tidy up your data set or organize it in a way that allows you
+to perform the analysis you would like to. This is even more true now when on
+one hand it is easier to access data than ever before but at the same time
+data sets are often messy or not exactly formatted you would like them to be.
+
+We will use here functions from `dplyr` package that aims to provide a function
+for each basic verb of data manipulation. These verbs can be organized into
+three categories based on the component of the data set that they work with:
+
+* Rows:
+  * `filter()` chooses rows based on column values.
+  * `arrange()` changes the order of the rows.
+  * `slice()` chooses rows based on location.
+* Columns:
+  * `select()` changes whether or not a column is included.
+  * `rename()` changes the name of columns.
+  * `mutate()` changes the values of columns and creates new columns.
+* Groups of rows:
+  * `summarise()` collapses a group into a single row.
+
+### The pipe
+
+All of the `dplyr` functions take a data frame as the first argument. Rather
+than forcing the user to either save intermediate objects or nest functions,
+`dplyr` provides the `%>%` operator from `magrittr`. `x %>% f(y)` turns into
+`f(x, y)` so the result from one step is then “piped” into the next step. You
+can use the pipe to rewrite multiple operations that you can read left-to-right,
+top-to-bottom (reading the pipe operator as “then”).
+
+### `filter()`
+
+`filter()` allows you to select a subset of rows in a data frame. Like all
+single verbs, the first argument is the tibble (or data frame). The second and
+subsequent arguments refer to variables within that data frame, selecting rows
+where the expression is TRUE.
+
+```{r filter}
+## Filter characters from Tatooine with brown eyes
+starwars %>%
+  filter(homeworld == "Tatooine", eye_color == "brown")
+```
+
+```{r filterExercise}
+## Filter all women whose mass is unknown
+starwars %>%
+  filter(sex == 'female',is.na(mass))
+```
+
+### `arrange()`
+
+`arrange()` works similarly to `filter()` except that instead of filtering or
+selecting rows, it reorders them. It takes a data frame, and a set of column
+names (or more complicated expressions) to order by. If you provide more than
+one column name, each additional column will be used to break ties in the values
+of preceding columns:
+
+```{r arrange}
+## Arrange characters by height and mass
+starwars %>%
+  arrange(height, mass)
+```
+
+Use desc() to order a column in descending order:
+
+```{r arrangeDesc}
+## Arrange characters by height in descending order
+starwars %>%
+  arrange(desc(height))
+```
+
+```{r arrangeExercise}
+## Show height of only women in descending order
+starwars %>%
+  filter(sex == 'female') %>%
+  arrange(desc(height))
+
+## The second option, however, I would say less readable
+arrange(filter(starwars, sex == 'female'), desc(height))
+```
+
+### `slice()`
+
+`slice()` lets you index rows by their (integer) locations. It allows you to
+select, remove, and duplicate rows. We can get characters from row numbers 5
+through 10.
+
+```{r slice}
+## Select lines from 5 to 10
+starwars %>%
+  slice(5:10)
+```
+
+It is accompanied by a number of helpers for common use cases:
+
+* `slice_head()` -- selects n rows from the top
+* `slice_tail()` -- select n rows from the bottom
+* `slice_sample()` -- selects n random rows
+* `slice_min()` -- selects rows with the lowest value of variable
+* `slice_max()` -- selects rows with the highest value of variable
+
+```{r sliceExercie}
+## Show in descending order the height of random sample of 10 observations
+```
+
+### `select()`
+
+Often you work with large data sets with many columns but only a few are actually
+of interest to you. `select()` allows you to rapidly zoom in on a useful subset
+using operations that usually only work on numeric variable positions:
+
+```{r select}
+## Select hair_color, skin_color and eye_color columns only
+starwars %>%
+  select(hair_color, skin_color, eye_color)
+
+## Select all columns between hair_color and eye_color
+starwars %>%
+  select(hair_color:eye_color)
+
+## Select all columns that are not between hair_color and eye_color
+starwars %>%
+  select(!(hair_color:eye_color))
+
+## Select all columns that contain word color
+starwars %>%
+  select(ends_with("color"))
+```
+
+There are a number of helper functions you can use within `select()`, like
+`starts_with()`, `ends_with()`, `matches()` and `contains()`. These let you
+quickly match larger blocks of variables that meet some criterion. See `?
+select` for more details.
+
+You can rename variables with select() by using named arguments:
+```{r selectRename}
+## Select homeworld and change its name to homeworld
+starwars %>%
+  select(home_world = homeworld)
+```
+
+But because select() drops all the variables not explicitly mentioned, it’s not
+that useful. Instead, use rename():
+
+```{r rename}
+## Rename home_world to homeworld
+starwars %>%
+  rename(home_world = homeworld)
+```
+
+```{r renameExercise}
+## Rename all American spelling variables to British spelling
+## Select all renamed variables and homeland
+## Filter only observations with skin color red
+## You might want to investigate function grepl() beforehand
+```
+
+### `mutate()`
+
+Besides selecting sets of existing columns, it’s often useful to add new columns
+that are functions of existing columns. This is the job of mutate():
+
+```{r mutate}
+## Create variable height in meters change the order of columns
+starwars %>%
+  mutate(height_m = height / 100) %>%
+  select(height_m, height, everything())
+```
+
+```{r mutateExercise}
+## For observations that have a color of hair create a new variable
+## that is the multiplication of height in meters and mass in kg
+```
+
+### `group_by()`
+
+group_by() takes an existing tbl and converts it into a grouped tbl where
+operations are performed "by group". It is almost never used separately but
+rather before either `mutate()` or `summarise()`.
+
+### `summarise()`
+
+```{r summarise}
+## Compute average characters' height in meters for each homeworld
+starwars %>%
+  group_by(homeworld) %>%
+  summarise(height = mean(height)/100)
+```
+
+```{r summariseExercise}
+## Compute average height for a specie on a given planet
+```
+
+```{r summariseExercise2}
+## Compute number of characters living on a given planet
+## Investigate n() function beforehand
+```
+
+### Recode variables
+
+Last time we used a named vector to recode variables. Using the `tidyverse` you
+might still use the same approach to recode variables but there are two
+fundamental functions that will help you to define a new variable that depends
+on the values of the other variable. It might sound confusing at first but let's
+imagine that you want to change the value `NA` in `hair_color` to `none`
+(although you realize that we will lose some information, right?). There is a
+very easy way to do so in `dplyr`. We will use function `if_else()`. It is a
+`dplyr` wrapper of `if-statement`. Please check the details by typing into
+console `?if_else` to better understand what it does. In general, it takes as
+the first argument the logical test, as the second argument is the value when
+the if statement is true, and the third argument is the value if the condition
+is not fulfilled.
+
+```{r ifElse}
+## Recode NA into 'none' in hair_color
+starwars %>%
+  mutate(hair_color = if_else(is.na(hair_color), 'none', hair_color))
+```
+
+The second very useful function is `case_when()` it allows for more than two
+options when we want to recode a variable. Imagine that we want to check who is
+eligible for roller-coaster. The boundary conditions are that the character must
+be tall enough and also old enough. However, we would also like to know which
+criteria is met.
+
+```{r caseWhen}
+## Create a variable based on both age and height
+## If birth_year > 18 and height > 170 than roller-coaster = eligible
+## If birth_year > 18 and height < 170 than roller-coaster = adult
+## If birth_year > 18 and height > 170 than roller coaster = tall
+starwars %>%
+  mutate(rollercoster = case_when( birth_year > 18 ~ 'adult',
+                                   height > 170 ~ 'tall',
+                                   birth_year > 18 && height > 170 ~ 'eligible'))
+```
+
+**IMPORTANT:** please note that the order matters. If we first test for
+conjunction and afterward for height and age we would never find anyone eligible
+for the roller-coaster.
+
+```{r recode}
+## Create a new variable BMI (body mass index). Compute BMI for each character
+## following the formula from the Wikipedia webpage
+## Based on the categorical variable BMI_norms filter only characters that 
+## have BMI in the normal range
+```
+
+## Data visualization with `ggplot`
+
+Before we start talking about networks and network analysis let's talk about
+data visualization in general. It is often the most important part of data
+analysis because it allows you to observe what really is happening in your data
+set #1pictureIsWorth1000words. In **R**, we have multiple systems for data
+visualization. Here, we will focus on the approach that uses similar logic to
+the data manipulation we showed you above.
+
+### Data set
+
+For data visualization, we will use a built-in data set that contains
+observations collected by the US Environmental Protection Agency on 38 models of
+car.
+
+```{r loadData}
+mpg
+```
+
+Among the variables in mpg are:
+
+1. `displ` -- a car’s engine size, in liters.
+2. `hwy` -- a car’s fuel efficiency on the highway, in miles per gallon (mpg). A
+car with a low fuel efficiency consumes more fuel than a car with a high fuel
+efficiency when they travel the same distance.
+
+Let’s use our first graph to answer a question: **Do cars with big engines use
+more fuel than cars with small engines?** You probably already have an answer, but
+try to make your answer precise. What does the relationship between engine size
+and fuel efficiency look like? Is it positive? Negative? Linear? Nonlinear?
+
+```{r firstPlot}
+## Scatter plot displ vs hwy
+mpg %>%
+ggplot() + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+The graph is probably exactly what we were expecting but how did it happen?
+Let's have a closer look. First, we took our data set and passed it to the
+function called `ggplot()`. It created a coordinate system to which you could
+add layers. Second, we added a layer of points with the use of `geom_point()`
+function. In the mapping argument, we specified what should be on x-axis and
+what on y-axis
+
+You can add a third variable, like class, to a two-dimensional scatter plot by
+mapping it to an anesthetic. Anesthetic is a visual property of the objects in
+your plot. Aesthetics include things like the size, shape, or color of your
+points. You can display a point (like the one below) in different ways by
+changing the values of its aesthetic properties. Since we already use the word
+“value” to describe data, let’s use the word “level” to describe aesthetic
+properties.
+
+You can convey information about your data by mapping the aesthetics in your
+plot to the variables in your data set. For example, you can map the colors of
+your points to the class variable to reveal the class of each car.
+
+```{r colorPlot}
+## Scatter plot displ vs hwy, with class colored
+mpg %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = displ, y = hwy, color = class))
+```
+
+```{r shapePlot}
+## Scatter plot displ vs hwy, shape indicates the class
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy, shape = class))
+```
+
+```{r plotExercise}
+## Plot scatter plot dspl vs hwy but the color type of transmission
+## Ideally we would have only two types of transmission: manual and auto
+## HINT: You might want to create a new variable for that purpose
+```
+
+
+#### Facets
+
+Facets
+
+One way to add additional variables is with aesthetics. Another way,
+particularly useful for categorical variables, is to split your plot into
+facets, subplots that each display one subset of the data.
+
+To facet your plot by a single variable, use facet_wrap(). The first argument of
+`facet_wrap()` should be a formula, which you create with ~ followed by a variable
+name (here “formula” is the name of a data structure in R, not a synonym for
+“equation”). The variable that you pass to facet_wrap() should be discrete.
+
+```{r facets}
+## Scatter plot dipl vs hwy, separeta graphs for manufacturers
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) + 
+  facet_wrap(~ manufacturer, nrow = 2)
+```
+
+To facet your plot on the combination of two variables, add facet_grid() to your
+plot call. The first argument of facet_grid() is also a formula. This time the
+formula should contain two variable names separated by a ~.
+
+```{r grids}
+## Scatter plot
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) + 
+  facet_grid(drv ~ cyl)
+```
+
+#### Tend Curves
+
+To change the geom in your plot, change the geom function that you add to
+`ggplot()`. For instance, instance if you are more interested in the trend curve
+than the scatter plot you might use `geom_smooth()`.
+
+```{r trendCurve}
+## Trend curve for the relationship between displ and hwy
+mpg %>%
+  ggplot() + 
+    geom_smooth(mapping = aes(x = displ, y = hwy))
+```
+
+Every geom function in ggplot2 takes a mapping argument. However, not every
+aesthetic works with every geom. You could set the shape of a point, but you
+couldn’t set the “shape” of a line. On the other hand, you could set the line
+type of a line. geom_smooth() will draw a different line, with a different line
+type, for each unique value of the variable that you map to line type.
+
+```{r trendCurveShape}
+## Trend curves for the relationship between displ and hwy, linetype indicates drv
+mpg %>%
+  ggplot() + 
+    geom_smooth(mapping = aes(x = displ, y = hwy, linetype = drv))
+```
+
+To display multiple geoms in the same plot, add multiple geom functions to ggplot():
+
+```{r multipleGeoms}
+## Combine scatter plot and trend curve
+mpg %>%
+  ggplot(mapping = aes(x = displ, y = hwy)) + 
+    geom_point() + 
+    geom_smooth()
+```
+
+You can also add a third variable similar to the one we used before.
+```{r multiple_geoms_colors}
+## Combine scatter plot and trend curve
+## Color in scatter plot indicates class
+mpg %>%
+  ggplot(mapping = aes(x = displ, y = hwy)) + 
+    geom_point(mapping = aes(color = class)) + 
+    geom_smooth()
+```
+
+## Write out data
+
+This is all very good but the question arises how one can somehow save the data
+set we spent so much time on? And also how we can import some data to `RStudio`.
+Obviously, there are specific functions to do so. Let's start with writing out a
+`data.frame` to a file.
+
+```{r irisWriteOut}
+## These are global variables and should be defined at the beginning of the notebook!
+HOME_PATH <- here::here()
+DATA_PATH <- file.path(HOME_PATH, 'data')
+
+## Write out data set to a csv file
+iris %>% 
+  write.csv2(file = file.path(DATA_PATH,'iris.csv'))
+```
+
+```{r plotWriteOut}
+## Assign plot to the object plot
+plt <- mpg %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = displ, y = hwy, color = class))
+
+## Global variable 
+FIG_PATH <- file.path(HOME_PATH, 'fig')
+
+## Write out the plot to the file
+plt %>%
+  ggsave(filename = file.path(FIG_PATH,"scatter_plot.png"),
+       device = "png",
+       dpi = 300,
+       height = 4.5,
+       width = 6)
+```
+
+```{r read}
+## Read the data from the file
+iris_read <- read.csv2(file = file.path(DATA_PATH, 'iris.csv'))
+```
