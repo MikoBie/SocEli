@@ -15,23 +15,41 @@ knit: reprex::reprex_render
 ---
 ## Introduction
 
-We have already covered some basics of `R` and more or less you understand the workflow in `RStudio`. I mean, I tried to show you these two things but it took me a lot of practice (and frustration) to be able to say that I more or less know what I am doing. So don't worry if you still feel uneasy with all that. Believe me. It is really just a matter of practice. 
+We have already covered some basics of `R` and more or less you understand the
+workflow in `RStudio`. I mean, I tried to show you these two things but it took
+me a lot of practice (and frustration) to be able to say that I more or less
+know what I am doing. So don't worry if you still feel uneasy with all that.
+Believe me. It is really just a matter of practice.
 
-In this notebook, we are finally going to talk about networks. These are going to be very basics because Szymon will have the whole part about it. The aim of this notebook is just to show you some simple visualizations of networks in R, and simple computations you can perform. To do that we are going to use `igraph` package.
+In this notebook, we are finally going to talk about networks. These are going
+to be very basics because Szymon will have the whole part about it. The aim of
+this notebook is just to show you some simple visualizations of networks in R,
+and simple computations you can perform. To do that we are going to use `igraph`
+package.
 
 ## Load Packages
 
-Let's do it a bit differently this time. The concept is really easy. We want to first check whether the package we want to use is already installed on our local machine. If it is installed we want to load it but if not we want to first install it. How to do it in `R`? Obviously, there are multiple ways how to implement it but let's focus on the scheme, not on the code. The scheme is as follows.
+Let's do it a bit differently this time. The concept is really easy. We want to
+first check whether the package we want to use is already installed on our local
+machine. If it is installed we want to load it but if not we want to first
+install it. How to do it in `R`? Obviously, there are multiple ways how to
+implement it but let's focus on the scheme, not on the code. The scheme is as
+follows.
 
-1. We need a list of packages we want to use in the notebook. It might be a list but a character vector would be good enough.
+1. We need a list of packages we want to use in the notebook. It might be a list
+but a character vector would be good enough.
 2. We take the first element from the list (vector) -- the name of the package.
 3. We check whether this package is already installed.
 4. If it is not installed we simply install it.
-5. Now, regardless of whether it had been installed previously or we just installed it, we have the package in question on our local machine. Therefore, we can install it.
+5. Now, regardless of whether it had been installed previously or we just
+installed it, we have the package in question on our local machine. Therefore,
+we can install it.
 
-After step number 5 we take the next package from our list (vector) until we reach the end of it. This is quite a simple algorithm that you would figure out yourself. In programming languages, it is a simple example of a for-loop combined with an if-statement.
+After step number 5 we take the next package from our list (vector) until we
+reach the end of it. This is quite a simple algorithm that you would figure out
+yourself. In programming languages, it is a simple example of a for-loop
+combined with an if-statement.
 
-but the scheme is more or less the same. First, we need a 
 ```{r loadLibraries}
 ## Create a vector with names of the packages we want to load
 packages <- c('tidyverse', 'igraph', 'ggraph')
@@ -58,31 +76,57 @@ lapply(packages, function(package){
 
 ## Networks in `igraph`
 
-Before we start with creating our first networks let's have a common understanding of some basic concepts. 
+Before we start with creating our first networks let's have a common
+understanding of some basic concepts.
 
-* A **network** refers to a structure representing a group of objects/actors/people and the relationship between them. In mathematics, it is known under the name graph. A network consists of nodes and edges.
-* Node, also vertex, represents an actor/object. It might have various properties that can be displayed in a network using its size, color, shape, etc.
-* Edge depicts the relationship between actors/objects. In a simple case edges represent the existence of the relationship, therefore, either there is a link between two objects or not. However, in more advanced cases the link might have the property of direction (directed networks) or intensity (weighted networks).
+* A **network** refers to a structure representing a group of
+objects/actors/people and the relationship between them. In mathematics, it is
+known under the name graph. A network consists of nodes and edges.
+* **Node**, also vertex, represents an actor/object. It might have various
+properties that can be displayed in a network using its size, color, shape, etc.
+* **Edge**, also link, depicts the relationship between actors/objects. In a
+simple case edges represent the existence of the relationship, therefore, either
+there is a link between two objects or not. However, in more advanced cases the
+link might have the property of direction (directed networks) or intensity
+(weighted networks).
 
-Before we talk about how to create networks in `R`, let's think about what kind of data we need. In general, the data to create a network might come in two forms:
+Before we talk about how to create networks in `R`, let's think about what kind
+of data we need. In general, the data to create a network might come in two
+forms:
 
-1. Edges list and nodes list. In some cases a list of edges is sufficient but to be 100% sure that we capture all nodes we better have both lists, for example:
-2. Adjacency Matrix. It is a square matrix. The elements of the matrix indicate whether pairs of nodes (vertexes) are adjacent (are in the relationship) or not, for example:
+1. Edges list and nodes list. In some cases a list of edges is sufficient but to
+be 100% sure that we capture all nodes we better have both lists, for example:
+2. Adjacency Matrix. It is a square matrix. The elements of the matrix indicate
+whether pairs of nodes (vertexes) are adjacent (are in the relationship) or not,
+for example:
 
 ### Undirected Networks
 
-The simplest network we can draw is an undirected one. It means that the nodes are connected with links that do not indicate the direction of the relationship. In terms of social science, you might think about the below network as a representation of friends on Facebook among 5 people. Being friends on Facebook does not have direction. You either are friends or not.
+The simplest network we can draw is an undirected one. It means that the nodes
+are connected with links that do not indicate the direction of the relationship.
+In terms of social science, you might think about the below network as a
+representation of friends on Facebook among 5 people. Being friends on Facebook
+does not have direction. You either are friends or not.
 
-The simplest way to create a network in `igraph` is by defining a vector of edges. The issue is, however, that it not that easy as it was in the example above. The vector of edges in `igraph` takes the following scheme: $ c(n_{1from}, n_{1to}, n_{2from}, n_{2to},...)$. Therefore, you need to be very careful when you construct such a vector. You also probably would like to specify the number of nodes. That way you indicate whether all nodes have at least one edge or there are some isolated nodes.
+The simplest way to create a network in `igraph` is by defining a vector of
+edges. The issue is, however, that it not that easy as it was in the example
+above. The vector of edges in `igraph` takes the following scheme: $
+c(n_{1from}, n_{1to}, n_{2from}, n_{2to},...)$. Therefore, you need to be very
+careful when you construct such a vector. You also probably would like to
+specify the number of nodes. That way you indicate whether all nodes have at
+least one edge or there are some isolated nodes.
 
 ```{r undirected}
 ## Create a igrpah object
 g1 <- graph( edges=c(1,2, 2,3, 3,1, 2,5, 4,5, 4,1), n=5, directed = FALSE ) 
 plot(g1)
 ```
+
 ### Directed network
 
-In directed networks on the other hand the relationship has also direction. In terms of being friends on Facebook, this graph might depict who sent the friend request to whom.
+In directed networks on the other hand the relationship has also direction. In
+terms of being friends on Facebook, this graph might depict who sent the friend
+request to whom.
 
 ```{r directed}
 g2 <- graph( edges=c(1,2, 2,3, 3, 1, 2, 5, 4, 5, 4,1), n=5, directed = TRUE )
@@ -91,7 +135,11 @@ plot(g2)
 
 ### Nammed vertexes
 
-In our case most of the time we would like to have named nodes instead of just numbers. There is an easy way to do it with the use of `igraph`. We can just create a character vector with the names of nodes. In this case, if we want to add nodes that are not connected to any other node we put their names as the value of the isolates argument. 
+In our case most of the time we would like to have named nodes instead of just
+numbers. There is an easy way to do it with the use of `igraph`. We can just
+create a character vector with the names of nodes. In this case, if we want to
+add nodes that are not connected to any other node we put their names as the
+value of the isolates argument.
 
 ```{r nammedVertexes}
 g4 <- graph( c("John", "Jim", "Jim", "Jack", "Jim", "Jack", "John", "John"), 
@@ -101,7 +149,10 @@ plot(g4)
 ```
 ### Attributes
 
-Let's now have a closer look at edges and nodes. We have already said that they might have different attributes that we can visualize using different aesthetics, i.e. colors, size, shape, etc. However, before we move any further let's extract information about edges and nodes from our `igraph` object. 
+Let's now have a closer look at edges and nodes. We have already said that they
+might have different attributes that we can visualize using different
+aesthetics, i.e. colors, size, shape, etc. However, before we move any further
+let's extract information about edges and nodes from our `igraph` object.
 
 ```{r edges}
 ## Extract edges from the object
@@ -113,7 +164,8 @@ E(g4)
 V(g4)
 ```
 
-We might also want to extract the adjacency matrix of the network. Sometimes it allows us to better understand what is happening. 
+We might also want to extract the adjacency matrix of the network. Sometimes it
+allows us to better understand what is happening.
 
 ```{r adjancyMatrix}
 ## Extract adjancy matrix
@@ -128,7 +180,10 @@ g4[,1] ## extract first column
 
 #### Vertex Attributes
 
-We have already said how vertex attributes might be useful in terms of visualization. Let's see how we add attributes to vertexes. It is fairly simple. You just need to add a vector of a number of nodes length or of length 1. In the latter case, all vertexes would have the same value of a given attribute.
+We have already said how vertex attributes might be useful in terms of
+visualization. Let's see how we add attributes to vertexes. It is fairly simple.
+You just need to add a vector of a number of nodes length or of length 1. In the
+latter case, all vertexes would have the same value of a given attribute.
 
 ```{r vertexAttributes}
 V(g4)$name
@@ -137,7 +192,10 @@ V(g4)$gender <- c('male', 'male', 'male', 'female', 'female', 'female', 'male')
 vertex_attr(g4)
 ```
 
-So how to use them in practice. We will use our second package for today for this -- `ggraph`. It is possible to do it in plain `igraph` but since we learn a bit of `ggplot` the `ggraph` has a very similar structure. I would say more straightforward.
+So how to use them in practice. We will use our second package for today for
+this -- `ggraph`. It is possible to do it in plain `igraph` but since we learn a
+bit of `ggplot` the `ggraph` has a very similar structure. I would say more
+straightforward.
 
 ```{r vertexAttributesPlot}
 ## Draw a network with the use of ggraph
@@ -157,7 +215,10 @@ g4 %>%
   ## Adds defualt theme of the graph (white background)
   theme_graph()
 ```
-One of the most fundamental properties of each node is the so-called degree. It just means a number of edges that are connected to a given node. There is a fairly easy way to compute it in `igrpah`.
+
+One of the most fundamental properties of each node is the so-called degree. It
+just means a number of edges that are connected to a given node. There is a
+fairly easy way to compute it in `igrpah`.
 
 ```{r degree}
 ## Compute the degree of each node
@@ -177,20 +238,24 @@ tibble(degree_n = degree_n,
   geom_bar(stat = 'identity', alpha = .2 ) +
   theme_classic()
 ```
+
 ```{r degreeExercise}
 ## Plot degree distribution but without loops and only considering edges that are ingoing the nodes
 ```
 
 #### Edges Attributes
 
-Similarly to vertexes (nodes') attributes we might add edge attributes to the network. We can either the same value for all edges or specify them more or less by hand with a vector of values.
+Similarly to vertexes (nodes') attributes we might add edge attributes to the
+network. We can either the same value for all edges or specify them more or less
+by hand with a vector of values.
 
 ```{r edgeAttributes}
 E(g4)$type <- 'email'
 E(g4)$weight <- c(.2,.3,.1,.5)
 ```
 
-Let's see how we can use it in practice. It has a very similar logic to node attributes because we are going to use the same package -- `ggraph`.
+Let's see how we can use it in practice. It has a very similar logic to node
+attributes because we are going to use the same package -- `ggraph`.
 
 ```{r edgeAttributesPlot}
 g4 %>%
@@ -216,7 +281,15 @@ g4 %>%
 
 ## Exercise
 
-We played a bit with very small artificial networks but in most cases, we will have bigger networks and we will be not creating the edges in `R`. We will load the data from the external file (i.e. csv) to `R`. Usually, it will be an edge list as I mentioned before. How to convert a more traditional `edge_list` to `igraph` object? We will use for this purpose a build-in data set -- high school. his dataset shows the friendship among high school boys as assessed by the question: "What fellows here in school do you go around with most often?". The question was posed twice, with one year in between (1957 and 1958), and shows the evolution in friendship between the two time points.
+We played a bit with very small artificial networks but in most cases, we will
+have bigger networks and we will be not creating the edges in `R`. We will load
+the data from the external file (i.e. csv) to `R`. Usually, it will be an edge
+list as I mentioned before. How to convert a more traditional `edge_list` to
+`igraph` object? We will use for this purpose a build-in data set -- high
+school. his dataset shows the friendship among high school boys as assessed by
+the question: "What fellows here in school do you go around with most often?".
+The question was posed twice, with one year in between (1957 and 1958), and
+shows the evolution in friendship between the two time points.
 
 ```{r ggraphExerciseExamineData}
 ## Examine the data
@@ -241,7 +314,10 @@ E(g5)
 edge_attr(g5)
 ```
 
-Now once we have the network. I would like you to try to plot it. I would like to see a directed network, with colored edges (it should be a function of the friendship year), and the size of the node should be proportional to the total degree of the node.
+Now once we have the network. I would like you to try to plot it. I would like
+to see a directed network, with colored edges (it should be a function of the
+friendship year), and the size of the node should be proportional to the total
+degree of the node.
 
 ```{r ggraphExrcies}
 ## WRITE YOUR CODE HERE
