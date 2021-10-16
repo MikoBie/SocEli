@@ -1,0 +1,232 @@
+---
+title: "Overview"
+description: |
+    Figures code for the presentation
+author:
+  - name: Szymon Talaga
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+```{r setup, include=FALSE}
+
+```
+
+
+```{r init}
+library(tidyverse)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(latex2exp)
+
+
+theme_set(theme_bw())
+
+
+ROOT <- here::here("netsci")
+FIGS <- file.path(ROOT, "figures", "overview/")
+DATA <- file.path(ROOT, "data")
+
+knitr::opts_chunk$set(
+    echo = FALSE,
+    fig.width = 8,
+    fig.height = 6,
+    fig.path = FIGS
+)
+```
+
+
+## ER random graph model
+
+```{r er_random_graph}
+set.seed(10101)
+
+G <- sample_gnp(20L, p = .2, directed = FALSE)
+
+ggraph(G) +
+    geom_edge_link(width = 2, color = "white") +
+    geom_edge_link(width = 1, color = "black") +
+    geom_node_point(size = 10, shape = 21L, stroke = 1L, fill = "black", color = "white") +
+    theme_graph()
+```
+
+## Random walk on a strongly connected network
+
+```{r rw_strong, fig.path = file.path(FIGS, "rw-strong/"), results = "hide"}
+set.seed(303L)
+
+N_STEPS <- 8L
+
+G <- graph_from_literal(
+    A -+ B, B -+ C, C -+ D, D -+ E,
+    E -+ F, F -+ C, C -+ G, G -+ A
+)
+pos <- layout_with_fr(G)
+
+
+rw <- random_walk(G, start = 1L, steps = N_STEPS, mode = "out")
+
+for (idx in rw) {
+    V(G)$current <- rep(FALSE, vcount(G))
+    V(G)$current[idx] <- TRUE
+    p <- ggraph(G, layout = pos) +
+        geom_edge_link(arrow = arrow(length = unit(4, "mm"), type = "closed"), end_cap = circle(5, "mm")) +
+        geom_node_point(aes(fill = current), color = "white", shape = 21L, stroke = 1, size = 10) +
+        guides(fill = "none") +
+        scale_fill_manual(values = c("black", "red")) +
+        theme_graph()
+    print(p)
+}
+```
+
+## Random walk on a weakly connected network
+
+```{r rw_weak, fig.path = file.path(FIGS, "rw-weak/"), results = "hide"}
+set.seed(304L)
+
+N_STEPS <- 24L
+
+G <- graph_from_literal(
+    A -+ B, B -+ C, C -+ D, D -+ A,
+    A -+ E, E -+ F, F -+ G, G -+ E
+)
+pos <- layout_with_fr(G)
+
+rw <- random_walk(G, start = 1L, steps = N_STEPS, mode = "out")
+
+for (idx in rw) {
+    V(G)$current <- rep(FALSE, vcount(G))
+    V(G)$current[idx] <- TRUE
+    p <- ggraph(G, layout = pos) +
+        geom_edge_link(arrow = arrow(length = unit(4, "mm"), type = "closed"), end_cap = circle(5, "mm")) +
+        geom_node_point(aes(fill = current), color = "white", shape = 21L, stroke = 1, size = 10) +
+        guides(fill = "none") +
+        scale_fill_manual(values = c("black", "red")) +
+        theme_graph()
+    print(p)
+}
+```
+
+
+## Poisson distribution
+
+```{r er-poisson}
+set.seed(101L)
+
+P <- .05
+N <- 100L
+G <- sample_gnp(N, p = P, directed = FALSE)
+
+D <- tibble(k = degree(G)) %>%
+    group_by(k) %>%
+    tally()
+
+df <- tibble(k = 0:20L) %>%
+    left_join(D, by = "k") %>%
+    mutate(n = replace_na(n, 0L)) %>%
+    mutate(
+        f = n / sum(n),
+        p = dpois(k, lambda = P*(N-1L))
+    )
+
+ggplot(df, aes(x = k)) +
+    geom_bar(aes(y = f, fill = "Observed"), stat = "identity") +
+    geom_point(aes(y = p, fill = "Poisson"), shape = 21L, color = "white", size = 5) +
+    labs(
+        x = "Node degree", 
+        y = "Probability", 
+        fill = "Distribution",
+        title = TeX(str_glue("Degree distribution in ER graph with $N = {N}$ and $p = {P}$")),
+        subtitle = "relative to the theoretical Poisson distribution"
+    ) +
+    scale_fill_manual(values = c("gray70", "indianred3")) +
+    theme(
+        legend.position = c(.75, .7),
+        text = element_text(size = 15)
+    )
+```
+
+## ER model percolation
+
+```{r er_model_percolation}
+set.seed(7171)
+
+map(c(.005, .01, .015, .02, .03, .05), function(p) {
+    G <- sample_gnp(100L, p = p, directed = FALSE)
+    frac_giant <- max(map_int(decompose(G), vcount)) / vcount(G) 
+    kbar <- mean(degree(G))
+    ggraph(G, layout = "fr") +
+        geom_edge_link(alpha = .5) +
+        geom_node_point(shape = 21L, fill = "black", color = "white", stroke = .5, size = 4) +
+        theme_graph() +
+        labs(
+            title = sprintf("%% of nodes in the giant component: %.1f", 100*frac_giant),
+            subtitle = sprintf("Average node degree: %.1f", kbar)
+        )
+})
+
+```
+
+## Political blogs
+
+```{r polblogs_init}
+G <- read_graph(gzfile(file.path(DATA, "polblogs.gml.gz")), format = "gml") %>%
+    decompose(mode = "weak")
+G <- G[[which.max(map_int(G, vcount))]] %>%
+    simplify()
+V(G)$deg <- degree(G)
+
+pos <- layout_with_fr(G)
+```
+
+```{r polblogs}
+ggraph(G, layout = pos) +
+    geom_edge_link(alpha = .05) +
+    geom_node_point(aes(size = sqrt(deg), fill = affiliation), shape = 21L, color = "white", stroke = .2) +
+    theme_graph() +
+    guides(
+        color = "none",
+        fill = "none",
+        size = "none"
+    ) +
+    scale_fill_manual(values = c("#001888", "#B01810"))
+```
+
+```{r karate}
+G <- read_graph(gzfile(file.path(DATA, "karate.gml.gz")), format = "gml") %>%
+    simplify
+
+V(G)$deg   <- degree(G)
+V(G)$label <- if_else(V(G)$name %in% c("Mr Hi", "John A"), V(G)$name, NA_character_)
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .05) +
+    geom_node_point(aes(size = sqrt(deg), fill = faction), shape = 21L, color = "white", stroke = .2) +
+    geom_node_label(aes(label = label), repel = TRUE) +
+    theme_graph() +
+    guides(
+        color = "none",
+        fill = "none",
+        size = "none"
+    ) +
+    scale_fill_manual(values = c("indianred3", "dodgerblue"))
+```
+
+```{r mexican_elites}
+G <- read_graph(gzfile(file.path(DATA, "mexican-elites.gml.gz")), format = "gml") %>%
+    simplify
+
+V(G)$deg <- degree(G)
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .05) +
+    geom_node_point(aes(size = sqrt(deg), fill = status), shape = 21L, color = "white", stroke = .2) +
+    guides(
+        color = "none",
+        fill = "none",
+        size = "none"
+    ) +
+    scale_fill_manual(values = c("brown", "darkgreen")) +
+    theme_graph()
+```

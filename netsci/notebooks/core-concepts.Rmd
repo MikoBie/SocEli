@@ -1,0 +1,475 @@
+---
+title: "Introduction to Network Science"
+description: |
+    Core concepts
+author:
+  - name: Szymon Talaga 
+    url: http://iss.uw.edu.pl/szymon-talaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
+date: October 15, 2021
+output: distill::distill_article
+---
+
+```{r setup}
+ROOT <- here::here()
+DATA <- file.path(ROOT, "data")
+UTIL <- file.path(ROOT, "scripts")
+
+source(file.path(UTIL, "prep-dependencies.R"))
+
+knitr::opts_chunk$set(
+    echo = TRUE,
+    fig.width = 8,
+    fig.height = 5
+)
+
+# PACKAGE THAT WE WILL USE
+library(tidyverse)
+library(ggplot2)
+library(ggforce)
+library(igraph)
+library(ggraph)
+library(latex2exp)
+
+# SET DEFAULT AETHETICS FOR `ggplot2`
+theme_set(theme_bw())
+```
+
+# Introduction
+
+In this notebook we will get some hands-on experience with basic, core notions of network science
+as well as working with one of the major network libraries for `R`, which is the `igraph` package.
+`Igraph` is a very powerful and efficient library and will do very well for our purposes.
+However, there are some alternatives such as [statnet suite of packages](http://statnet.org/)
+which is also very popular among social scientist. However, due to time constraints we have to choose
+one and `igraph` will be our choice for this class.
+
+In this practice session we will learn about:
+
+1. Loading graph datasets into working memory.
+2. Adding vertex and edge attributes to graph objects.
+3. Calculating edge densities and degree distributions.
+4. Drawing graphs using `ggraph` library which works on top of the excellent `ggplot2` library.
+5. Sampling from simple generative models, namely ER random graph model and it is simple extension
+   known as stochastic block model.
+6. Along the way we will try to answer some questions which may be interesting for social scientists.
+7. And work with some fundamental programming abstractions such as loops and map procedures.
+
+
+## Datasets
+
+In this class in general we will work primarily with the following three real-world networks:
+
+1. **Hyperlinks between US political blogs in 2004.** This is a quite famous dataset representing hyperlink connections
+   between various US political blogs in 2004. Crucially, it also provides information on general political affiliations
+   of the blogs (i.e. republican vs democrat). As such it is a perfect dataset for studying, for instance,
+   homophily and reciprocity in politics-focused mass online communication. It may not be a typical elite network
+   but it gives some interesting snapshot of public discourse concerning political elites. Moreover, it can be
+   argued that some of the most influential bloggers can be considered a part political elites due to the potential
+   for influencing decision-makers and voters alike.
+   * It is a directed network with $1490$ nodes and $19090$ so it is relatively large.
+
+2. **Conflict-induced decomposition of a karate club in 1970's (US).** This is clearly not an elite network,
+   but it is very famous in network science and we will use it to discuss several methods, particularly community
+   detection. It represents associations (e.g. frequent talking outside the class) between members of a karate
+   club in 1970's in the US, as measured through an in-depth ethnographic observations, in the period when
+   the club had been going through a serious conflict between the main instructor and the main administrator,
+   leading to a decomposition into two opposing camps.
+   * It is an undirected network with $34$ nodes and $78$ edges. It comes with edge weights, but very often
+   is analyzed also as an unweighted network.
+  
+3. **Association within Mexican political elites in XX century.** It depicts associations ---
+   through political, kinship, friendship and business ties --- between some of the leading members
+   of Mexican political elites throughout the XX century. It includes metadata indicating whether a given
+   person is of a civilian or military status as well as the year of joining the government. I also extended
+   the metadata for our purposes by adding years of death as well as the number of years of functioning
+   within the elite (the number of years before joining the government and dying or the year of publication of the
+   study which is 1996).
+   * It is an undirected network with $35$ nodes and $117$ edges. Note that thanks to time-related metadata
+     it can be also seen as a dynamic network evolving through time. We will try to study it also from this
+     perspective.
+
+All the datasets are already prepared and available in `data` subdirectory. They are saved in the so-called
+`GML` (Graph Modeling Language) format which is one of popular formats for storing graph data.
+The data files are also compressed using the GZIP algorithm so they need to be uncompressed first.
+
+# Loading data
+
+Since the data files are compressed we will start by writing a simple function for loading our datasets.
+Note that in the first chunk we define `DATA` global variable which is a path pointing to the `data` subdirectory.
+
+```{r load_data_function}
+## HERE WE DEFINE THE FUNCTION FOR READING DATA
+##
+## NOTE THAT WE USE `datapath` ARGUMENT WITH THE DEFAULT VALUE
+## EQUAL TO `DATA` GLOBAL VARIABLE.
+## THIS WAY THE FUNCTION CAN BE USED WITHOUT SPECIFYING `datapath` ARG
+## EVER TIME, BUT IT CAN BE CUSTOMIZED IF NEEDED.
+
+read_gml <- function(name, datapath = DATA) {
+    # define ungzipped connection to the file (so-called file handle)
+    # note that we use `open = "rb"` argument to specify that we
+    # are opening the file only for reading data and we do this
+    # in so-called binary format, since the file is compressed.
+    
+    # Add extensions `.gml.gz` to `name` if needed
+    if (!str_ends(name, "\\.gml\\.gz")) name <- str_c(name, ".gml.gz")
+    # Define path to the particular file we want to open
+    # by concatenating `name` to `datapath`.
+    fpath <- file.path(datapath, name)
+    # Create file handle with GZIP compression
+    fh <- gzfile(fpath, open = "rb")
+    # Load graph
+    G <- read_graph(fh, format = "gml")
+    # Return the graph
+    G
+}
+```
+
+
+# Karate club network
+
+We start by analyzing the karate club network as it is relatively small and simple.
+First, we need to load it. The second obvious step in network analysis (usually)
+is to try to visualize your network, in particular if it is not too big, to get some
+feel for how it really looks. Such visual and exploratory data analysis is very often
+necessary for really understanding our data.
+
+```{r karate_read}
+# We will usually use `G` variable to refer to the main network object
+# we are currently working with.
+G <- read_gml("karate")
+# Look at the graph
+G
+```
+
+We see some sample edges as well as the list of attributes defined on our graph object.
+Most importantly, we see two vertex attributes of interest: `name` and `faction`
+referring to the group to which a given node belonged in the conflict between the instructor
+and the administrator.
+
+For the purpose of visualization we will now add also `deg` attribute storing node degrees.
+This way it will be easy for us to scale node sizes according to their degrees, to easily
+see which nodes are most well-connected.
+
+```{r karate_add_deg}
+V(G)$deg <- degree(G)
+```
+
+```{r karate_plot}
+# ON TOP THERE IS A MAIN CALL TO `ggraph` FUNCTION WHICH SETS UP THE CANVAS
+# FOR OUT PLOT.
+# THEN WE ADD SUBSEQUENT LAYER OF OUR FIGURE USING THE `+` OPERATOR.
+karate_plot <- ggraph(G, layout = "fr") +
+    geom_edge_link(     # HERE WE ADD LAYER DRAWING EDGES BETWEEN NODE
+        alpha = .25,    # WE DO NOT CARE SO MUCH ABOUT SEEING EDGES SO WE MAKE THEM PARTIALLY TRANSPARENT
+    ) +
+    geom_node_point(         # LAYER DRAWING NODES AS POINTS
+        aes(
+            fill = faction,  # USE FACTION ATTRIBUTE TO FILL NODES WITH DIFFERENT COLORS
+            size = sqrt(deg) # USE SQUARE ROOT OF NODE DEGREE TO SCALE NODE SIZES
+        ),
+        shape = 21L,         # A PARTICULA POINT SHAPE WHICH CAN USE SEPARATE INTERNAL AND BORDER COLORS
+        color = "white",     # USE WHITE BORDERS FOR NICE VISUALIZATION
+        stroke = 1,          # WIDTH OF THE BORDERS
+     ) +
+    # REMOVE LEGEND FOR NODE SIZE
+    guides(
+        size = "none"
+    ) +
+    # ADD GRAPH SPECIFIC AESTHETIC THEME
+    theme_graph()
+
+# WE SAVED THE PLOT AS VARIABLE
+# SO WE CAN MODIFY IT LATER
+karate_plot
+```
+
+We know that the dynamics of the group were driven by the two main actors ---
+the main instructor (known as Mr Hi) and the main administrator (known as John A).
+So it may be worthwhile to see where they are in the network.
+Thus, we will now add node labels to the picture.
+
+```{r karate_labels}
+karate_plot +
+    geom_node_label(aes(label = name))
+```
+
+It does not look very good, because the plot is cluttered with *names* of less important actors.
+So it is better to plot only Mr Hi and John A. To do so, we can transform `name` variable
+within our call to `geom_node_label` so only Mr Hi and John A are shown.
+
+```{r karate_labels_correct}
+karate_plot +
+    geom_node_label(aes(
+        label = ifelse(name %in% c("Mr Hi", "John A"), name, NA_character_)
+    ), repel = TRUE)
+```
+
+We can now see that, indeed, the two man are central nodes in their corresponding factions.
+
+## Edge density and degree distribution
+
+Let us now try to summarize our network somehow in more quantitative terms. We will use the two main properties
+we learned about during the lecture, that is, edge density and degree distribution.
+
+```{r karate_edge_density}
+edge_density(G)
+```
+We see that about $14\%$ of all possible edges exist in the network. Whether this fraction is high or small
+depends very much on the context, so we will not interpret it in this terms right now. However, knowing edge
+density is sometimes very important as we will learn later. But for now, let us just be happy that we managed
+to calculate it.
+
+Now we turn to the degree distribution of our network. As we will see it very much **not Poissonian** pointing
+to the fact that real networks are hardly ever similar to ER random graphs in this respect.
+
+```{r karate_degree_distribution}
+## CREATE A SIMPLE DATA FRAME WITH NODE DEGREES
+data <- tibble(deg = degree(G))
+
+## DRAW HISTOGRAM
+ggplot(data) +
+    geom_histogram(
+        aes(x = deg), 
+        bins = 15L,
+        color = "white"
+    )
+```
+
+Clearly, the distribution has a long tail of large values. These are hubs of the networks, that is, most central
+nodes. To see how far off this is from the Poisson distribution expected for ER random graphs we can overlay the
+plot with expected degree probabilities for a Poisson distribution with the same average degree.
+
+```{r karate_degree_distribution_poisson}
+# CALCUALTe AVERAGE DEGREE
+dbar <- mean(degree(G))
+
+## CREATE A SIMPLE DATA FRAME WITH NODE DEGREES
+## AND POISSONIAN PROBABILITIES
+data <- tibble(
+    deg = degree(G),
+    p   = dpois(deg, lambda = dbar),
+    n   = p * vcount(G)   # Expected number of nodes of a given degree given Poisson dist
+)
+
+## DRAW HISTOGRAM
+ggplot(data) +
+    geom_histogram(
+        aes(x = deg), 
+        bins = 15L,
+        color = "white"
+    ) +
+    geom_point(aes(x = deg, y = n), shape = 21L, fill = "indianred3", color = "white", stroke = 1, size = 5) +
+    labs(
+        x = "Node degree",
+        y = "Count"
+    )
+```
+
+### Comparison with ER model ensemble
+
+Okay, but maybe the distribution is really like in ER random graph and it is so right-skewed only because
+of a particular combination of edge density and size of the network? That may be, so let us check this.
+We will now use one of the most fundamental techniques of computational network science (even though in a very simple manner).
+
+We will simulate a large number of ER random graphs with the same edge density as our observed network
+and use this large ensemble of simulated network to calculate a sort of expected distribution.
+This large set of simulated networks will form our **null distribution** for the degree distribution
+assuming that the generative model for our network was really just an ER random graph model.
+And if our observed network is very unlikely relative to our assumed null distribution then we can
+conclude that its degree distribution cannot be really explained by ER random graph model.
+
+**NOTE.** The above logic is in fact very similar to how statistical tests are constructed in classical statistics
+(test statistics are also calculated to some particular null distribution). The important difference in the case
+of network analyses like the one above, is that we need to be more careful about choosing a null distribution
+we want to test against. In the case of standard statistical tests there is usually a natural choice for null
+distribution while in the case of networks this problem is more complex. We will return to this point later on.
+
+
+```{r karate_simulate_null_distribution}
+N <- 100L   # Number of simulated networks
+density <- edge_density(G)
+n_nodes <- vcount(G)
+
+simulated <- vector(mode = "list", length = N)
+for (i in 1:N) {
+    er_graph <- sample_gnp(n_nodes, p = density, directed = FALSE)
+    df <- tibble(deg = degree(er_graph))
+    simulated[[i]] <- df
+}
+
+# Combine simualted data frames into a single data frame
+# and count occurences of node degres
+simulated <- bind_rows(simulated) %>%
+    group_by(deg) %>%
+    tally() %>%    # Calculate counts
+    mutate(
+        p = n / sum(n),
+        mode = "simulated"
+    )
+
+simulated
+```
+
+We can now plot observed and simulated histograms together.
+It is evident that ER model cannot produce the observed degree distribution.
+Hence, we can reject it as a generative model for our data.
+
+```{r karate_joint_histogram}
+observed <- tibble(deg = degree(G)) %>%
+    group_by(deg) %>%
+    tally() %>%
+    mutate(
+        p = n / sum(n),
+        mode = "observed"
+    )
+
+data <- bind_rows(observed, simulated)
+
+ggplot(data) +
+    geom_bar(aes(x = deg, y = p, fill = mode), stat = "identity", show.legend = FALSE) +
+    facet_wrap(~mode) +
+    labs(x = "Node degree", y = "Probability")
+```
+
+# Practice problem I
+
+Load and plot Mexican elites (`read_gml("mexican-elites")`) network. Calculate its edge density and degree distribution.
+Does it look like a Poisson distribution, that is, as if it was generated from ER random graph model?
+
+
+# So why do we care about ER random graph model?
+
+We have sort of shown that ER model is poor fit for many real networks. So why should we care about it?
+We should because:
+
+1. It is simple and can be used to generate random networks conditioned on only a single global property: **edge density**
+   (and number of nodes, but this is obvious and trivial).
+2. It is related to small-world effect (we will discuss this later).
+3. It explains the prevalence of giant components in nature. More concretely, it shows that it is enough to have
+   a relatively low fraction of random connections to guarantee that most of the network will form one connected
+   giant components. This is really one of the most fundamental results of early network science.
+   We take it for granted now, but it is really important. It show that some kinds of structure arise from
+   pure randomness. And a lot of network science is about trying to distinguish between different kinds of structures
+   driven by different generating mechanism, some of which may be more and some less random.
+4. It is basis on which other more complex generative models are built, so it is important to understand it in order
+   to understand other models.
+
+
+# Stochastic block model and the paradox of minority and majority groups
+
+We will know introduce ourselves to a simple generalization of ER random graph model known as stochastic block
+model and we will use them to derive a very interesting result from quantitative sociology in the tradition
+of Georg Simmel and Peter Blau.
+
+Stochastic block model is a network model in which we have $N$ nodes divided in $k$ non-overlapping groups.
+Then, ties between (and within) different groups have different probabilities of existence.
+
+We will now consider a simple stochastic block model of the following specification:
+
+$$
+n_1 = 100, n_2 = 10
+\\
+\begin{array}{c|cc}
+      & 1 & 2 \\
+      \hline
+    1 & .14 & \\
+    2 & .1, & .5
+\end{array}
+$$
+So we have a majority group composed of $100$ nodes and minority group composed of $10$ nodes.
+We also set connection probabilities so they satisfy the following requirements:
+
+* Majority group ($100$ nodes) has only a slight preference for in-group ties $(.14 / .1 = 1.4)$
+* Minority group ($10$ nodes) has much stronger preference for in-group ties $(.5 / .1 = 5)$
+* Expected degree for members of the two groups are the same and approximately equal to $15$
+
+So it is clear from the setup that the minority group has stronger preference for in-group ties
+and does not differ from the majority group in terms of average degree. However, as we will now
+see in terms of observed relations the minority group will have "more open" ties, meaning more
+out-group connections. And this results only from the relative sizes of the two groups
+and this simple quantitative effect is stronger that the bias we built in our model.
+
+This is quite important as it is common for people in social science to fall in the trap
+of "psychological fallacy", where they try to explain results as the one above by referring
+to some internal psychological properties, while very often there are much simple explanations
+based only on the objective quantitative structure properties of a social system at hand.
+
+```{r sbm_setup}
+n1 <- 100L      # Majority group size
+n2 <- 10L       # Minority group size
+
+pmatrix <- matrix(c(
+    .14, .1,
+    .1, .5
+), byrow = TRUE, ncol = 2L)
+
+
+# Sample single SBM realization from the above model
+# We write a simple function to add block membership when generating graphs from SBM
+simulate_sbm <- function(n1, n2, pmatrix) {
+    N <- n1 + n2
+    G <- sample_sbm(N, pref.matrix = pmatrix, block.sizes = c(n1, n2), directed = FALSE)    
+    block <- rep(c("I", "II"), times = c(n1, n2))
+    V(G)$block <- block
+    G
+}
+```
+
+```{r sbm_plot}
+set.seed(10101)
+
+G <- simulate_sbm(n1, n2, pmatrix)
+
+ggraph(G) +
+    geom_edge_link(alpha = .25) +
+    geom_node_point(aes(fill = block), shape = 21L, color = "white", stroke = 1, size = 5)
+```
+
+Now we need to calculate fraction of out-group edges per block. We can quite easily find all edges going
+between the two blocks and within blocks by using a special kind of syntax offered by `igraph`.
+
+```{r sbm_count_edges}
+## HERE WE DEFINE A FUNCTION FOR COUNTING EDGES BETWEEN TWO GROUPS OF NODES
+## (WHERE THE SAME GROUP CAN BE USED TWO TIMES)
+find_edges_between_groups <- function(graph, group1, group2) {
+    E(graph)[group1 %--% group2]
+}
+
+# TEST FUNCTION
+block1 <- V(G)[V(G)$block == "I"]
+block2 <- V(G)[V(G)$block == "II"]
+find_edges_between_groups(G, block1, block2)
+```
+```{r sbm_calculate_edge_fractions}
+# Number of edges within block I
+e11 <- length(find_edges_between_groups(G, block1, block1))
+# Number of edges within block II
+e22 <- length(find_edges_between_groups(G, block2, block2))
+# Number of edges between blocks
+e12 <- length(find_edges_between_groups(G, block1, block2))
+
+# Out-group fraction in block I
+out1 <- e12 / (e12 + e11)
+# Out-group fraction in block II
+out2 <- e12 / (e12 + e22)
+
+c(
+    "Block I"  = out1,
+    "Block II" = out2
+)
+```
+
+# Practice problem II
+
+## Part A
+
+Simulate distribution of out-group ties fractions over $100$ replications of the above stochastic block model.
+
+## Part B
+
+Do the same but for many different values of probability of out-group ties ranging from $0$ and $1$
+and plot your results to see how strong the in-group bias of the minority group needs to be
+in order to observe any empirical bias.

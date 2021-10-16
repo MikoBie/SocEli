@@ -1,0 +1,779 @@
+---
+title: "Introduction to Network Science"
+description: |
+    Structure of networks
+author:
+  - name: Szymon Talaga 
+    url: http://iss.uw.edu.pl/szymon-talaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
+date: October 15, 2021
+output: distill::distill_article
+---
+
+```{r setup}
+ROOT <- here::here()
+DATA <- file.path(ROOT, "data")
+UTIL <- file.path(ROOT, "scripts")
+
+source(file.path(UTIL, "prep-dependencies.R"))
+
+knitr::opts_chunk$set(
+    echo = TRUE,
+    fig.width = 8,
+    fig.height = 5
+)
+
+# PACKAGE THAT WE WILL USE
+library(tidyverse)
+library(ggplot2)
+library(ggforce)
+library(igraph)
+library(ggraph)
+library(patchwork)
+library(latex2exp)
+
+# SET DEFAULT AETHETICS FOR `ggplot2`
+theme_set(theme_bw())
+```
+
+# Introduction
+
+In this notebook we will get some hands-on experience some of the most important methods
+for quantifying and analyzing structure of networks beyond simple edge density and degree
+distribution. We will also learn about the most important null model which is commonly
+used to construct statistical tests for various network parameters.
+
+In the second part we will discuss a more in-depth analysis of a real-world elite network
+of Mexican political elites.
+
+
+## Datasets
+
+In this class in general we will work primarily with the following three real-world networks:
+
+1. **Hyperlinks between US political blogs in 2004.** This is a quite famous dataset representing hyperlink connections
+   between various US political blogs in 2004. Crucially, it also provides information on general political affiliations
+   of the blogs (i.e. republican vs democrat). As such it is a perfect dataset for studying, for instance,
+   homophily and reciprocity in politics-focused mass online communication. It may not be a typical elite network
+   but it gives some interesting snapshot of public discourse concerning political elites. Moreover, it can be
+   argued that some of the most influential bloggers can be considered a part political elites due to the potential
+   for influencing decision-makers and voters alike.
+   * It is a directed network with $1490$ nodes and $19090$ so it is relatively large.
+
+2. **Conflict-induced decomposition of a karate club in 1970's (US).** This is clearly not an elite network,
+   but it is very famous in network science and we will use it to discuss several methods, particularly community
+   detection. It represents associations (e.g. frequent talking outside the class) between members of a karate
+   club in 1970's in the US, as measured through an in-depth ethnographic observations, in the period when
+   the club had been going through a serious conflict between the main instructor and the main administrator,
+   leading to a decomposition into two opposing camps.
+   * It is an undirected network with $34$ nodes and $78$ edges. It comes with edge weights, but very often
+   is analyzed also as an unweighted network.
+  
+3. **Association within Mexican political elites in XX century.** It depicts associations ---
+   through political, kinship, friendship and business ties --- between some of the leading members
+   of Mexican political elites throughout the XX century. It includes metadata indicating whether a given
+   person is of a civilian or military status as well as the year of joining the government. I also extended
+   the metadata for our purposes by adding years of death as well as the number of years of functioning
+   within the elite (the number of years before joining the government and dying or the year of publication of the
+   study which is 1996).
+   * It is an undirected network with $35$ nodes and $117$ edges. Note that thanks to time-related metadata
+     it can be also seen as a dynamic network evolving through time. We will try to study it also from this
+     perspective.
+
+All the datasets are already prepared and available in `data` subdirectory. They are saved in the so-called
+`GML` (Graph Modeling Language) format which is one of popular formats for storing graph data.
+The data files are also compressed using the GZIP algorithm so they need to be uncompressed first.
+
+# Loading data
+
+Since the data files are compressed we will start by writing a simple function for loading our datasets.
+Note that in the first chunk we define `DATA` global variable which is a path pointing to the `data` subdirectory.
+
+```{r load_data_function}
+## HERE WE DEFINE THE FUNCTION FOR READING DATA
+##
+## NOTE THAT WE USE `datapath` ARGUMENT WITH THE DEFAULT VALUE
+## EQUAL TO `DATA` GLOBAL VARIABLE.
+## THIS WAY THE FUNCTION CAN BE USED WITHOUT SPECIFYING `datapath` ARG
+## EVER TIME, BUT IT CAN BE CUSTOMIZED IF NEEDED.
+
+read_gml <- function(name, datapath = DATA) {
+    # define ungzipped connection to the file (so-called file handle)
+    # note that we use `open = "rb"` argument to specify that we
+    # are opening the file only for reading data and we do this
+    # in so-called binary format, since the file is compressed.
+    
+    # Add extensions `.gml.gz` to `name` if needed
+    if (!str_ends(name, "\\.gml\\.gz")) name <- str_c(name, ".gml.gz")
+    # Define path to the particular file we want to open
+    # by concatenating `name` to `datapath`.
+    fpath <- file.path(datapath, name)
+    # Create file handle with GZIP compression
+    fh <- gzfile(fpath, open = "rb")
+    # Load graph
+    G <- read_graph(fh, format = "gml")
+    # Return the graph
+    G
+}
+```
+
+
+# Clustering
+
+A common pattern found in social networks (as well as other types of networks) is known as transitivity or clustering.
+It is a tendency for nodes connected to the same neighbor to be connected also to each other. In more sociological
+terms it means that clustering, from a perspective of an individual node, implies that:
+
+<blockquote>
+    My friends are friends with each other
+</blockquote>
+
+The clustering coefficient measures exactly this tendency. It is defined in terms of the number of 2-paths
+with node $i$ at the center (e.g. $j-i-k$) which are close and form a triangle, that is, a 3-cycle (e.g. $j-i-k-j$).
+
+Similarily, we can calculate global clustering coefficient just by counting the fraction of all 2-paths in a network
+which form triangles.
+
+Clustering is commonly related to the phenomenon of homophily which is the tendency for similar individuals to
+be likely to be connected to each other. Crucially, high clustering implies a kind of structural similarity between
+connected nodes as it means that they are likely to share the same neighbors and hence to be embedded in the network
+in similar ways, or in other words, that they share similar **social positions** within the network.
+
+
+## Clustering in karate club
+
+```{r clustering_karate}
+G <- read_gml("karate")
+
+## Calculate clustering
+transitivity(G, type = "global")
+```
+The global clustering of the karate club network is about $25\%$ meaning that on average one fourth of all 2-paths
+in the network make triangles. To get some feel for whether this results is high or low we can compare it with
+the expected clustering in a corresponding ER random graph which is equal simply to edge density.
+
+Later on we will also discuss a better method for such statistical validation.
+
+```{r clustering_karate_comparison}
+clu  <- transitivity(G, type = "global")
+dens <- edge_density(G) 
+
+c(
+    "Observed clustering" = clu,
+    "ER clustering" = dens,
+    "ratio" = clu / dens
+)
+```
+
+We see that observed clustering is almost two times higher suggesting that in this network we indeed have a significant
+tendency for people sharing similar connections. This is in general a typical result for social networks, 
+so we should not be surprised.
+
+We can get a more finely-grained picture of the clustering in the network by studying local clustering coefficients
+for individual nodes and also relating them to their degrees.
+
+```{r clustering_karate_local_spectrum, fig.width = 8, fig.height = 5}
+data <- tibble(
+    clu = transitivity(G, type = "localundirected"),
+    deg = degree(G)
+)
+
+# Add clustering and degrees also as attributes
+V(G)$clu <- data$clu
+V(G)$deg <- data$deg
+
+plt1 <- ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .5) +
+    geom_node_point(aes(fill = clu, size = sqrt(deg)), shape = 21L, color = "white", stroke = 1L) +
+    geom_node_label(aes(label = ifelse(name %in% c("Mr Hi", "John A"), name, NA_character_)), repel = TRUE) +
+    geom_mark_ellipse(aes(x = x, y = y, color = faction)) +
+    scale_fill_gradient(low = "gray", high = "red") +
+    guides(
+        size = "none",
+        color = "none"
+    ) +
+    labs(
+        fill = "Clustering"
+    ) +
+    theme_graph()
+
+plt2 <- ggplot(data, aes(x = deg, y = clu)) +
+    geom_point(shape = 21L, fill = "black", color = "white", stroke = 1, size = 3) +
+    geom_smooth(method = "gam", color = "indianred3", se = FALSE) +
+    labs(
+        x = "Node degree",
+        y = "Local clustering",
+        title = "Clustering spectrum"
+    )
+
+# USE `patchwork` PACKAGE TO COMBINE TWO PLOTS SIDE-BY-SIDE
+(plt1 | plt2) + plot_layout(widths = c(3, 2))
+```
+
+# Community detection
+
+Edge density is just one global parameter, but in many networks local edge densities in different regions
+can vary greatly. Very often we may be interested in detecting subgroups of nodes belonging to such regions
+of high edge density. They correspond to parts of the network which are densely connected and cohesive.
+Such densely connected subgroups are often called **communities** and the process of finding them
+is known in the literature as **community detection**.
+
+**NOTE.** The notion of community is in general more complex and there are types of communities 
+that may not be defined solely through high local edge density. But for the sake of simplicity
+let us think about communities as regions of high local edge densities.
+
+One of the most popular, and also very effective in many circumstances, algorithms for community detection
+is the Girvan-Newman algorithm. It is based on the idea of finding communities by systematic deletion of
+edges with high betweenness (those through pass most of the shortest paths between different nodes in the network).
+By deleting such nodes the network is slowly decomposed into disjoint components and then a particular partition
+yielding most cohesive (modular) communities may be selected.
+
+## Communities in the karate club network
+
+```{r community_detection_karate}
+set.seed(101010)
+communities <- cluster_edge_betweenness(G, weights = NULL, directed = FALSE)
+
+V(G)$comm <- as.character(communities$membership)
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .25) +
+    geom_node_point(aes(fill = comm, size = sqrt(deg)), shape = 21L, color = "white", stroke = 1) +
+    geom_node_label(aes(label = ifelse(name %in% c("Mr Hi", "John A"), name, NA_character_)), repel = TRUE) +
+    geom_mark_ellipse(aes(x = x, y = y, color = faction)) +
+    guides(
+        size = "none",
+        color = "none"
+    ) +
+    labs(
+        fill = "G-N community"
+    ) +
+    theme_graph()
+```
+
+Note that the algorithm does not find a perfect partition into two factions. However, the detected communities
+are mostly contained within specific factions. Therefore, the algorithm detected more finely grained structure
+while it still identified the large-scale division.
+
+We can check this by using the previous result of our community detection procedure and ask it for a division
+into only two communities. And as we can see the solution is almost perfect. The algorithm misclassified only
+one node, which indeed is at the boundary of the two factions.
+
+```{r community_detection_karate_cut2}
+## FIND DIVISION INTO 2 COMMUNITIES
+## BASED ON THE PREVIOUS RESULT OF THE G-N ALGORITHM
+V(G)$comm2 <- as.character(cut_at(communities, no = 2L))
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .25) +
+    geom_node_point(aes(fill = comm2, size = sqrt(deg)), shape = 21L, color = "white", stroke = 1) +
+    geom_node_label(aes(label = ifelse(name %in% c("Mr Hi", "John A"), name, NA_character_)), repel = TRUE) +
+    geom_mark_ellipse(aes(x = x, y = y, color = faction)) +
+    guides(
+        size = "none",
+        color = "none"
+    ) +
+    labs(
+        fill = "G-N community"
+    ) +
+    theme_graph()
+```
+
+We can check this by comparing the split into two communities against the known division in two factions directly.
+And we see that our earlier conclusion is correct. The algorithm missclassified only a single node.
+
+The first detected community clearly corresponds to the faction of John A and the second to the faction of Mr Hi.
+
+```{r community_detection_cut2_accuracy}
+table(V(G)$faction, V(G)$comm2)
+```
+
+We can also study the entire profile of modularity score with respect to the number of communities as detected
+by the G-N algorithm. In our case we see that the solution with $2$ communities is not much worse than the best
+solution with $5$ communities. This corroborates our intuition that the algorithm finds the division into two
+faction correctly, but also allows us to detect more finely-grained subdivisions.
+
+```{r community_detection_modularity_curve}
+data <- tibble(
+    n_comm = 1L:vcount(G),
+    modularity = map_dbl(n_comm, ~modularity(G, cut_at(communities, no = .x)))
+)
+
+ggplot(data, aes(x = n_comm, y = modularity)) +
+    geom_vline(xintercept = c(2L, 5L), linetype = 2L) +
+    # geom_line(linetype = 2) +
+    geom_point(shape = 21L, color = "indianred3", fill = "white", stroke = 2L, size = 3) +
+    labs(
+        x = "Number of communities",
+        y = "Modularity"
+    )
+```
+
+**NOTE.** Without going into to much of mathematical details, the modularity score is a function of a particular
+network and a partition of this network into $k$ groups and it tells us how well separated the two groups are
+given the structure of the network.
+
+
+# Small world model
+
+Now we turn to the important question of how is it possible that real networks can have high clustering at short
+average path lengths at the same time. In general this is an empirical fact as the famous small-world experiment
+has shown (and multiple later studies confirmed this). Nonetheless, for quite a long time it was not that clear
+why is that the case.
+
+This question was famously answered by Watts and Strogatz in the early 1990's when they introduced the small-world
+model. It is very simple. $N$ nodes are arranged sequentially on a circle and each node is connected to $k$ of its
+closest neighbors. This ensures a particular, but usually high, level of local clustering for each node, which
+depends functionally on the particular value of $k$. However, average path lengths in such a model are in general
+long and they grow quickly with the number of nodes.
+
+So the model additionally rewires completely at random some small fraction of edges. This has only marginal
+effect on the clustering (which remains high) while drastically reduces average path lengths and prevent them
+from growing fast even in very large networks. Hence, just a tiny bit of randomness can drastically change
+important global properties of the network (this is conceptually quite similar to how giant components arise in ER model).
+
+```{r small_world_no_rewiring, fig.width = 6, fig.height = 6}
+G <- sample_smallworld(1L, size = 50L, nei = 4L, p = 0)
+
+clu <- transitivity(G, type = "global")
+apl <- mean_distance(G, directed = FALSE)
+
+ggraph(G, layout = "circle") +
+    geom_edge_arc(alpha = .5, strength = -.5) +
+    geom_node_point(shape = 21L, fill = "indianred3", color = "white", stroke = 1, size = 5) +
+    labs(
+        title = "Small-world model with no rewiring",
+        subtitle = sprintf("Clustering: %.2f; Average path length: %.2f", clu, apl)
+    ) +
+    theme_graph()
+```
+```{r small_world_with_rewiring, fig.width = 6, fig.height = 6}
+set.seed(303L)
+
+P <- .05
+G <- sample_smallworld(1L, size = 50L, nei = 4L, p = P)
+
+clu <- transitivity(G, type = "global")
+apl <- mean_distance(G, directed = FALSE)
+
+ggraph(G, layout = "circle") +
+    geom_edge_arc(alpha = .5, strength = -.5) +
+    geom_node_point(shape = 21L, fill = "indianred3", color = "white", stroke = 1, size = 5) +
+    labs(
+        title = sprintf("Small-world with rewiring (p = %.2f)", P),
+        subtitle = sprintf("Clustering: %.2f; Average path length: %.2f", clu, apl)
+    ) +
+    theme_graph()
+```
+
+The above are just two particular cases. What matter for us most is to see how the model works for networks
+of different sizes and different values of $p$ (rewiring probability).
+
+```{r small_world_simulation}
+N_REPS = 1L
+K <- 4L
+
+data <- as_tibble(expand.grid(
+    N   = 2^(5:12),
+    p   = c(0, .001, .01, .05, .1, .2, .5, 1)
+)) %>% 
+    mutate(
+        sw  = map2(N, p, ~rerun(N_REPS, sample_smallworld(1L, size = .x, nei = K, p = .y))),
+        clustering = map_dbl(sw, ~mean(map_dbl(.x, transitivity, type = "global"))),
+        `average path length` = map_dbl(sw, ~mean(map_dbl(.x, mean_distance)))
+    ) %>%
+    select(-sw) %>%
+    pivot_longer(c(clustering, `average path length`))
+```
+
+```{r small_world_simulation_plot, fig.width = 9, fig.height = 4}
+ggplot(data, aes(x = N, y = value, color = as.factor(p))) +
+    geom_line() +
+    geom_point(shape = 21L, fill = "white", stroke = .5, size = 2) +
+    facet_wrap(~name, scales = "free_y") +
+    scale_x_log10(
+        breaks = scales::trans_breaks("log2", function(x) 2^x),
+        labels = scales::trans_format("log2", scales::math_format(2^.x))
+    ) +
+    annotation_logticks(sides = "b") +
+    scale_color_viridis_d(begin = .2, end = .9) +
+    labs(
+        x = "Number of nodes (log-scale)",
+        y = "",
+        color = "Rewiring prob."
+    )
+```
+
+
+# Assortativity & homophily
+
+Assortativity refers to a statistical tendency that nodes which are similar to each other with respect to some
+attribute(s) tend to be connected more often than other nodes. In sociology such tendency in the context of
+social networks is often called **homophily**.
+
+The network of political blogs in the US in 2004 gives us a perfect opportunity to see analysis of assortativity
+with respect to a qualitative attribute, that is, political affiliation of a glob.
+
+```{r assortativity_polblogs}
+G <- read_gml("polblogs")
+
+# GET ONLY GIANT COMPONENT
+# AND SIMPLIFY (REMOVE ANY SELF-LOOPS AND MULTILINKS)
+G <- decompose(G)
+G <- G[[which.max(map_int(G, vcount))]]
+G <- simplify(G)
+
+## Assortativity with respect to political affiliation
+## `types` ARGUMENT IS THE VECTOR OF CATEGORIES NODES BELONG TO.
+## IT HAS TO BE PASSED AS A VECTOR OF INTEGERS
+## THAT IS WHY WE FIRST CONVERT IT TO A FACTOR AND THEN TO INTEGER VECTOR
+assortativity_nominal(G, types = as.integer(as.factor(V(G)$affiliation)))
+```
+We see that the level of assortativity, and therefore political homophily, among the blogs is very high
+(assortativity coefficient is a kind of correlation coefficient so it cannot exceed $1$).
+
+Assortativity can be defined not only with respect to qualitative attributes but also numeric.
+In particular, very often an important question is whether, in a given network, nodes with high degrees
+tend to connect to other high degree nodes (positive degree assortativity), or maybe to low degree nodes
+(negative degree assortativity).
+
+This is what degree assortativity coefficient measures. Technically it is equal just to Pearson linear correlation
+between degrees of adjacent nodes (minus one, because they "loose" one degree to connect to each other).
+
+```{r assortativity_degree_polblogs}
+assortativity_degree(G, directed = TRUE)
+```
+This assortativity coefficient in our case is moderately negative meaning that blogs often mentioned by other
+blogs (high degree) are mentioned more often by perihperal (low degree) blogs than other well-connected blogs.
+To get some understanding of why it is so, we should take a look at the degree distribution of the network.
+
+```{r polblogs_degree_dist}
+data <- tibble(
+    odeg = degree(G, mode = "out"),
+    ideg = degree(G, mode = "in")
+) %>% 
+    pivot_longer(c(odeg, ideg)) %>%
+    mutate(name = ifelse(name == "ideg", "in-degree", "out-degree"))
+
+ggplot(data, aes(x = value)) +
+    geom_histogram(bins = 15, color = "white") +
+    facet_wrap(~name, ncol = 2L) +
+    labs(
+        x = "Node degree",
+        y = "Count"
+    )
+```
+
+Both in- and out-degree distribution are somewhat right-skewed, which means there are much more low-degree nodes
+than high-degree nodes. Such structure often enforces at least some level of negative degree assortativity
+as high-degree nodes cannot avoid being linked to lower degree neighbors.
+
+The `polblogs` network is directed so it also makes sense to ask about the level of reciprocity of ties, that is,
+how often a tie going one way corresponds to a tie in the other direction.
+
+```{r reciprocity_polblogs}
+reciprocity(G)
+```
+
+So while assortativity/homophily is very large, the level of reciprocity is rather small.
+
+
+# Configuration model
+
+As we already established, simple ER random graph model fails us with respect to one very important property,
+that is, it does not reproduce right-skewed degree distributions characteristic for real-world networks.
+But there is an extension which does exactly what we need.
+
+**Configuration model** is random graph model which generates networks in which connections are completely random
+but each node has exactly the degree we want it have. That is, it allows us to generate random graphs which
+have the same degree sequence as our observed network of interest but which apart from this one property
+are as random as possible. Technically speaking, configuration model samples all graphs with a given degree
+sequence uniformly at random.
+
+There are multiple variants of this model and here we will use one which also guarantees that sampled networks
+are simple (no self-loops or multilinks) and connected. It is very well-suited for randomized undirected, simple,
+connected networks.
+
+Earlier we discovered that karate club network exhibits clustering coefficient markedly greater than its edge
+density, suggesting that there is indeed a non-trivial social process at play, which enforces higher than expected
+abundance of triangles (friends of my friends are my friends etc.).
+
+However, the comparison we made was really done assuming that ER model was the generating process.
+And since the observed network has right-skewed distribution, we know that this assumption was not correct.
+But now we can use configuration model to conduct a better statistical test.
+
+The logic is simple. We will use configuration model to sample multiple ($1000$) randomized analogues of our
+observed graph which all will be connected and have the same degree sequence (so also edge density).
+Then, we will use them to calculate a null distribution of global clustering coefficients assuming that
+configuration model was the generating mechanism. And if we find out that the karate club network is still
+an atypical observation with respect to the null distribution, then it will mean that the degree sequence
+alone cannot explain its structure, meaning that there must some higher order social process influencing
+its structure (such as homophily, probably operating within the conflicted groups).
+
+```{r conf_model_karate}
+set.seed(1010)
+
+N_REP <- 1000L
+G     <- read_gml("karate")
+deg   <- degree(G)
+
+# NULL DISTRIBUTION OF GLOBAL CLUSTERING COEFFICIENT
+null_clustering <- map_dbl(rerun(N_REP, sample_degseq(deg, method = "vl")), transitivity, type = "global")
+
+# OBSERVED CLUSTERING
+obs_clustering <- transitivity(G, type = "global")
+# P-VALUE: fraction of null values greater than or equal to the observed value
+pvalue <- mean(null_clustering >= obs_clustering)
+```
+
+```{r conf_model_karate_plot}
+data <- tibble(clustering = null_clustering)
+
+label = sprintf("Observed clustering: %.2f\np = %.3f", obs_clustering, pvalue)
+
+ggplot(data, aes(x = clustering)) +
+    geom_histogram(bins = 20L, color = "white") +
+    geom_vline(xintercept = obs_clustering, color = "indianred3", linetype = 2L, size = 1.5) +
+    annotate("label", x = .25, y = 150L, label = label, hjust = 0) +
+    labs(
+        x = "Global clustering",
+        y = "Count"
+    )
+```
+
+Interestingly, now we see that clustering in the karate club network is induced purely by its degree sequence,
+so in this case there is no evidence of significant tendency for clustering of ties.
+
+
+# Case study: evolution of Mexican political elites in 20th century
+
+We will now try to put everything (more or less) we learned together and conduct a more in-depth study
+of the structure of the network of associations between members of Mexican political elites in the 20th century.
+
+We will use the fact that this network is inherently dynamic --- for each person we know the year he has rised to
+political importance and the year he died (or not died as the analysis ends at 1996). We also know which politicians
+are of civilian or military status.
+
+So, as is customary, we will start by visualizing the network.
+
+```{r mexican_elites}
+G <- read_gml("mexican-elites")
+V(G)$deg <- degree(G)
+
+## COLORS THAT WE WILL USE TO DENOTE CIVILIANS AND MILITARYMEN
+COLORS <- c(
+    civilian = "brown", 
+    military = "darkgreen"
+)
+```
+
+```{r mexican_elites_plot}
+set.seed(1L)
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .25) +
+    geom_node_label(aes(fill = status, size = sqrt(deg), label = name), color = "white") +
+    scale_fill_manual(values = COLORS) +
+    scale_size_continuous(range = c(1.5, 3)) +
+    guides(
+        size = "none"
+    ) +
+    theme_graph() +
+    theme(
+        legend.position = "bottom"
+    )
+```
+
+The general structure of the network suggests that we may have some sort of (fuzzy) division between
+civilian and military actors. However, the current representation is not really reasonable as it completely
+ignores when any given actor was active in the political field.
+
+But let us first take a look at what the Girvan-Newman community detection algorithm will tell us about the
+community structure in this "timeless" network.
+
+
+```{r mexican_elites_overall_communities, fig.height = 7, fig.width = 9}
+set.seed(1)
+communities <- cluster_edge_betweenness(G)
+
+V(G)$comm4 <- as.character(communities$membership)
+assort     <- assortativity_nominal(G, as.integer(as.factor(V(G)$status)))
+
+ggraph(G, layout = "fr") +
+    geom_edge_link(alpha = .25) +
+    geom_node_label(aes(fill = status, size = sqrt(deg), label = name), color = "white") +
+    geom_mark_ellipse(aes(x = x, y = y, color = comm4)) +
+    scale_fill_manual(values = COLORS) +
+    scale_size_continuous(range = c(1.5, 3)) +
+    guides(
+        size = "none"
+    ) +
+    labs(
+        title = sprintf("Status assortativity: %.2f", assort) 
+    ) +
+    theme_graph() +
+    theme(
+        legend.position = "bottom"
+    )
+```
+
+So it seems that our intuition about a division between military and civilian actors may make some sense.
+But we need to unravel this evolution in time.
+
+We know the start and end year of political life of each individual. So we can use this information to determine
+when the network changed by new actors being introduced or old removed. And this will allow us to derive
+a sequence of networks, one for each change, which in turn will allow us to see the evolution of the entire
+political field.
+
+```{r mexican_elites_dynamic_graphs}
+# DATA FRAME WITH VERTEX ATRIBUTES
+
+data    <- tibble(name = V(G)$name, status = V(G)$status, start = V(G)$start, end = V(G)$end) %>%
+    arrange(start, end)
+
+changes <- unique(sort(c(V(G)$start, V(G)$end)))
+# COPY OF THE ORIGINAL GRAPH
+# WHICH WILL BE USED TO DEFINE DYNAMIC GRAPHS
+# ----------------------------------------------
+# We will use custom attribute `active` which will be just a boolean vector
+# indicating who is active at any given time step (going from change to change)
+G_dyn <- G
+V(G_dyn)$active <- FALSE 
+active <- vector(mode = "list", length = length(changes) - 1L)
+
+for (i in seq_along(changes)) {
+    change <- changes[i]
+    if (change == 1996) next
+    V(G_dyn)$active[V(G_dyn)$start == change] <- TRUE
+    V(G_dyn)$active[V(G_dyn)$end == change]   <- FALSE
+    
+    active[[i]] <- V(G_dyn)$active 
+}
+```
+
+```{r mexican_elites_dynamic_graph_plot_function}
+## FUNCTION TO VISUALIZE THE NETWORK AT INDIVIDUAL TIMESTEPS
+dynviz <- function(graph, layout, size) {
+    ggraph(graph, layout = layout) +
+        geom_edge_link(alpha = .25) +
+        geom_node_label(aes(
+            fill = factor(status, levels = c("civilian", "military")),  
+            label = name,
+            size = sqrt(deg)
+        ), color = "white") +
+        scale_fill_manual(values = COLORS[levels(factor(V(graph)$status))]) +
+        scale_size_continuous(range = range(size)) +
+        guides(
+            size = "none"
+        ) +
+        labs(fill = "") +
+        theme_graph() +
+        theme(
+            legend.position = "bottom"
+        )
+}
+```
+
+**NOTE.** You will need to install `gifski` package in order to compile the following chunk to HTML
+as it contains an animated GIF.
+
+```{r mexican_elites_dynamic_graph_plot, animation.hook = "gifski"}
+# NODES' POSITIONS CALCULATED ON THE TOTAL NETWORK
+# THIS ALLOW TO ANIMATE THE NETWORK WITHOUT NODES JUMPING ALL OVER THE PLACE BETWEEN FRAMES
+set.seed(101010)
+POS  <- layout_with_fr(G)
+XLIM <- range(POS[, 1L])
+YLIM <- range(POS[, 2L])
+size <- sqrt(V(G)$deg)
+# RESCALE IN 1.5 - 3
+SIZE <- ((size - min(size)) / (max(size) - min(size)) ) * 1.5 + 1.5
+
+
+for (i in seq_along(active)) {
+    act <- active[[i]]
+    change <- changes[i]
+    G_dyn  <- induced_subgraph(G, which(act))
+    V(G_dyn)$deg <- V(G)$deg[act]
+    layout <- matrix(POS[act, ], ncol = 2)  # GET POSITIONS OF ACTIVE NODES and enfore matrix format with 2 columns
+    size   <- SIZE[act]
+    plot   <- dynviz(G_dyn, layout = layout, size = size) +
+        scale_x_continuous(limits = XLIM) +
+        scale_y_continuous(limits = YLIM) +
+        labs(title = change)
+    print(plot)
+}
+```
+
+Now once we can see the actual evolution we can also try to enhance our understanding by using more quantitative
+description. In particular, we will be interested in describing the dynamics of the political field in terms of:
+
+1. Size of the network.
+2. Fraction of military actors.
+3. Edge density.
+4. Clustering.
+5. Assortativity with respect to the status (military vs. civilian).
+6. Modularity of the best split given by the G-N algorithm.
+
+```{r mexica_elites_dynamics}
+data <- tibble(
+    year       = changes[1:length(active)],
+    graph      = map(active, ~induced_subgraph(G, which(.x))),
+    size       = map_int(graph, vcount) / vcount(G),
+    military   = map_dbl(graph, ~mean(V(.x)$status == "military")),
+    density    = map_dbl(graph, edge_density),
+    clustering = map_dbl(graph, transitivity, type = "global"),
+    homophily  = map_dbl(graph, ~assortativity_nominal(.x, types = as.integer(as.factor(V(.x)$status)))),
+    modularity = map_dbl(graph, ~{
+        if (ecount(.x) <= 0L) return(NA_real_)
+        comm <- cluster_edge_betweenness(.x)
+        m0 <- modularity(.x, comm$membership)
+        # m1 <- modularity(.x, as.integer(as.factor(V(.x)$status)))
+        m0
+        # m1 / m0
+    })
+) %>%
+    mutate(across(where(is.numeric), ~ifelse(is.nan(.x) | is.infinite(.x), NA, .x))) %>%
+    mutate(across(where(rlang::is_integerish), as.integer))
+```
+
+```{r, mexican_elites_dynamics_plot}
+data %>%
+    select(-graph) %>%
+    pivot_longer(-year) %>%
+    ggplot(aes(x = year, y = value, color = name)) +
+    geom_line() +
+    geom_point(shape = 21L, fill = "white", stroke = .75, size = 1.5) +
+    scale_color_brewer(type = "qual", palette = 3L) +
+    scale_x_continuous(n.breaks = length(changes), labels = changes) +
+    labs(
+        x = "",
+        y = "",
+        color = ""
+    ) + 
+    theme(
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, vjust = .5, hjust = 0.5)
+    )
+```
+
+```{r, mexican_elites_dynamics_plot_facets, fig.height = 9}
+data %>%
+    select(-graph) %>%
+    pivot_longer(-year) %>%
+    ggplot(aes(x = year, y = value, color = name)) +
+    geom_line() +
+    geom_point(shape = 21L, fill = "white", stroke = .75, size = 1.5) +
+    scale_color_brewer(type = "qual", palette = 3L) +
+    scale_x_continuous(n.breaks = length(changes), labels = changes) +
+    labs(
+        x = "",
+        y = "",
+        color = ""
+    ) + 
+    theme(
+        legend.position = "right",
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
+    ) +
+    facet_wrap(~name, ncol = 1L, scales = "free_y")
+```

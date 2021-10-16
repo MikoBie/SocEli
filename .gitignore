@@ -1,3 +1,10 @@
+# Data & figures
+data/**
+figures/**
+
+# R stuff
+**/.Rhistory
+
 # Exams
 exams/**
 

@@ -1,0 +1,161 @@
+---
+title: "Structure"
+description: |
+    Figures code for the presentation
+author:
+  - name: Szymon Talaga
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+
+```{r init}
+library(tidyverse)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(latex2exp)
+
+
+theme_set(theme_bw())
+
+
+ROOT <- here::here("netsci")
+FIGS <- file.path(ROOT, "figures", "structure/")
+DATA <- file.path(ROOT, "data")
+
+knitr::opts_chunk$set(
+    echo = FALSE,
+    fig.width = 8,
+    fig.height = 6,
+    fig.path = FIGS
+)
+
+## HERE WE DEFINE THE FUNCTION FOR READING DATA
+##
+## NOTE THAT WE USE `datapath` ARGUMENT WITH THE DEFAULT VALUE
+## EQUAL TO `DATA` GLOBAL VARIABLE.
+## THIS WAY THE FUNCTION CAN BE USED WITHOUT SPECIFYING `datapath` ARG
+## EVER TIME, BUT IT CAN BE CUSTOMIZED IF NEEDED.
+
+read_gml <- function(name, datapath = DATA) {
+    # define ungzipped connection to the file (so-called file handle)
+    # note that we use `open = "rb"` argument to specify that we
+    # are opening the file only for reading data and we do this
+    # in so-called binary format, since the file is compressed.
+    
+    # Add extensions `.gml.gz` to `name` if needed
+    if (!str_ends(name, "\\.gml\\.gz")) name <- str_c(name, ".gml.gz")
+    # Define path to the particular file we want to open
+    # by concatenating `name` to `datapath`.
+    fpath <- file.path(datapath, name)
+    # Create file handle with GZIP compression
+    fh <- gzfile(fpath, open = "rb")
+    # Load graph
+    G <- read_graph(fh, format = "gml")
+    # Return the graph
+    G
+}
+```
+
+
+```{r small_world_no_rewiring, fig.width = 6, fig.height = 6}
+G <- sample_smallworld(1L, size = 50L, nei = 4L, p = 0)
+
+clu <- transitivity(G, type = "global")
+apl <- mean_distance(G, directed = FALSE)
+
+ggraph(G, layout = "circle") +
+    geom_edge_arc(alpha = .5, strength = -.5) +
+    geom_node_point(shape = 21L, fill = "indianred3", color = "white", stroke = 1, size = 5) +
+    labs(
+        title = "Small-world model with no rewiring",
+        subtitle = sprintf("Clustering: %.2f; Average path length: %.2f", clu, apl)
+    ) +
+    theme_graph()
+```
+
+```{r small_world_with_rewiring, fig.width = 6, fig.height = 6}
+set.seed(303L)
+
+P <- .05
+G <- sample_smallworld(1L, size = 50L, nei = 4L, p = P)
+
+clu <- transitivity(G, type = "global")
+apl <- mean_distance(G, directed = FALSE)
+
+ggraph(G, layout = "circle") +
+    geom_edge_arc(alpha = .5, strength = -.5) +
+    geom_node_point(shape = 21L, fill = "indianred3", color = "white", stroke = 1, size = 5) +
+    labs(
+        title = sprintf("Small-world with rewiring (p = %.2f)", P),
+        subtitle = sprintf("Clustering: %.2f; Average path length: %.2f", clu, apl)
+    ) +
+    theme_graph()
+```
+
+```{r small_world_simulation}
+N_REPS = 1L
+K <- 4L
+
+data <- as_tibble(expand.grid(
+    N   = 2^(5:12),
+    p   = c(0, .001, .01, .05, .1, .2, .5, 1)
+)) %>% 
+    mutate(
+        sw  = map2(N, p, ~rerun(N_REPS, sample_smallworld(1L, size = .x, nei = K, p = .y))),
+        clustering = map_dbl(sw, ~mean(map_dbl(.x, transitivity, type = "global"))),
+        `average path length` = map_dbl(sw, ~mean(map_dbl(.x, mean_distance)))
+    ) %>%
+    select(-sw) %>%
+    pivot_longer(c(clustering, `average path length`))
+```
+
+```{r small_world_simulation_plot, fig.width = 9, fig.height = 4}
+ggplot(data, aes(x = N, y = value, color = as.factor(p))) +
+    geom_line() +
+    geom_point(shape = 21L, fill = "white", stroke = .5, size = 2) +
+    facet_wrap(~name, scales = "free_y") +
+    scale_x_log10(
+        breaks = scales::trans_breaks("log2", function(x) 2^x),
+        labels = scales::trans_format("log2", scales::math_format(2^.x))
+    ) +
+    annotation_logticks(sides = "b") +
+    scale_color_viridis_d(begin = .2, end = .9) +
+    labs(
+        x = "Number of nodes (log-scale)",
+        y = "",
+        color = "Rewiring prob."
+    )
+```
+
+```{r conf_model_karate}
+set.seed(1010)
+
+N_REP <- 1000L
+G     <- read_gml("karate")
+deg   <- degree(G)
+
+# NULL DISTRIBUTION OF GLOBAL CLUSTERING COEFFICIENT
+null_clustering <- map_dbl(rerun(N_REP, sample_degseq(deg, method = "vl")), transitivity, type = "global")
+
+# OBSERVED CLUSTERING
+obs_clustering <- transitivity(G, type = "global")
+# P-VALUE: fraction of null values greater than or equal to the observed value
+pvalue <- mean(null_clustering >= obs_clustering)
+```
+
+```{r conf_model_karate_plot}
+data <- tibble(clustering = null_clustering)
+
+label = sprintf("Observed clustering: %.2f\np = %.3f", obs_clustering, pvalue)
+
+ggplot(data, aes(x = clustering)) +
+    geom_histogram(bins = 20L, color = "white") +
+    geom_vline(xintercept = obs_clustering, color = "indianred3", linetype = 2L, size = 1.5) +
+    annotate("label", x = .25, y = 150L, label = label, hjust = 0) +
+    labs(
+        x = "Global clustering",
+        y = "Count"
+    )
+```
