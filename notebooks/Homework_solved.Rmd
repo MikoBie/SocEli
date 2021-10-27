@@ -1,19 +1,26 @@
 ---
 title: "Homework"
 subtitle: 'Data frames'
-author: "Szymon Talaga and Mikołaj Biesaga"
-affiliation: "Robert Zajonc Institute for Social Studies"
+author:
+  - name: Mikołaj Biesaga 
+    url: http://iss.uw.edu.pl/mikolaj-biesaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
 output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    style: TRUE
-    tidyverse_quiet: TRUE
-    std_out_err: TRUE
-    session_info: TRUE
-    comment: "#"
-knit: reprex::reprex_render
+   distill::distill_article:
+     highlight: haddock
+     code_folding: false
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = TRUE,
+  message = TRUE,
+  comment = "#",
+  R.options = list(width = 60)
+)
+```
 
 ## Introduction
 
@@ -23,8 +30,9 @@ you to know the answer right away. First, you should try to review the
 afterward, just try to look for the solution online. It might be either in the
 books we recommend to you or just on StackOverflow.
 
-```{r loadLibraries}
-library(tidyverse) ## every time we open RStudio we should load libraries we are going to use
+```{r loadLibraries, include=FALSE}
+library(tidyverse) ## every time we open RStudio we should load 
+                   ## libraries we are going to use
 ```
 
 ## Task 1
@@ -55,7 +63,14 @@ they are fully vaccinated or not. Count the number of interviews you are meant
 to schedule.
 
 ```{r vaccination}
-set.seed(42) ## this is important because below we use a pseudorandomization function -- sample(). It draws in random order 100 times from a vector c(TRUE, FALSE, NA) with replacement. We want to make sure that for all of us it will draw in exactly the same order. Therefore, we tell R that it should use a build-in Random Number Generation in the specific state (the number we put as an argument in the function does not matter while we all have the same). Try commenting out this function and running the code a few times. What is the difference?
+set.seed(42) ## this is important because below we use a pseudorandomization 
+## function -- sample(). It draws in random order 100 times from a vector 
+## c(TRUE, FALSE, NA) with replacement. We want to make sure that for all 
+## of us it will draw in exactly the same order. Therefore, we tell R that 
+## it should use a build-in Random Number Generation in the specific state 
+## (the number we put as an argument in the function does not matter while 
+## we all have the same). Try commenting out this function and running the 
+## code a few times. What is the difference?
 
 ## Data set
 df_vaccination <- tibble( 'first' = sample(c(TRUE,FALSE), 100, replace = TRUE),

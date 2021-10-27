@@ -1,19 +1,26 @@
 ---
 title: "Data manipulation and data visualisation"
 subtitle: 'Data frames'
-author: "Szymon Talaga and Mikołaj Biesaga"
-affiliation: "Robert Zajonc Institute for Social Studies"
+author:
+  - name: Mikołaj Biesaga 
+    url: http://iss.uw.edu.pl/mikolaj-biesaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
 output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    style: TRUE
-    tidyverse_quiet: TRUE
-    std_out_err: TRUE
-    session_info: TRUE
-    comment: "#"
-knit: reprex::reprex_render
+   distill::distill_article:
+     highlight: haddock
+     code_folding: false
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = TRUE,
+  message = FALSE,
+  comment = "#",
+  R.options = list(width = 60)
+)
+```
 
 ## Introduction
 
@@ -175,7 +182,8 @@ There are a number of helper functions you can use within `select()`, like
 quickly match larger blocks of variables that meet some criterion. See `?
 select` for more details.
 
-You can rename variables with select() by using named arguments:
+You can rename variables with select() by using named
+arguments:
 ```{r selectRename}
 ## Select homeworld and change its name to homeworld
 starwars %>%

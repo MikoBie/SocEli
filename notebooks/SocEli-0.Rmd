@@ -1,19 +1,26 @@
 ---
 title: "Very brief and naive introduction to R programming language"
 subtitle: 'R 101'
-author: "Szymon Talaga and Mikołaj Biesaga"
-affiliation: "Robert Zajonc Institute for Social Studies"
+author:
+  - name: Mikołaj Biesaga 
+    url: http://iss.uw.edu.pl/mikolaj-biesaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
 output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    style: TRUE
-    tidyverse_quiet: TRUE
-    std_out_err: TRUE
-    session_info: TRUE
-    comment: "#"
-knit: reprex::reprex_render
+   distill::distill_article:
+     highlight: haddock
+     code_folding: false
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = TRUE,
+  message = FALSE,
+  comment = "#",
+  R.options = list(width = 60)
+)
+```
 
 ## Introduction
 In this notebook, we will try to explain the most basic concepts of R

@@ -1,18 +1,26 @@
 ---
 title: "Introduction to igraph"
-author: "Szymon Talaga and Mikołaj Biesaga"
-affiliation: "Robert Zajonc Institute for Social Studies"
+author:
+  - name: Mikołaj Biesaga 
+    url: http://iss.uw.edu.pl/mikolaj-biesaga
+    affiliation: Robert Zajonc Institute for Social Studies, University of Warsaw
+    affiliation_url: http://iss.uw.edu.pl
 output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    style: TRUE
-    tidyverse_quiet: TRUE
-    std_out_err: TRUE
-    session_info: TRUE
-    comment: "#"
-knit: reprex::reprex_render
+   distill::distill_article:
+     highlight: haddock
+     code_folding: false
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = TRUE,
+  message = FALSE,
+  comment = "#",
+  R.options = list(width = 60)
+)
+```
+
 ## Introduction
 
 We have already covered some basics of `R` and more or less you understand the
@@ -175,7 +183,8 @@ g4[]
 g4[1,] ## extract first row
 g4[,1] ## extract first column
 
-## This is the adjacency matrix for the directed graph. Would the adjacency matrix for the undirected graph be exactly the same?
+## This is the adjacency matrix for the directed graph. Would the 
+## adjacency matrix for the undirected graph be exactly the same?
 ```
 
 #### Vertex Attributes
@@ -240,7 +249,8 @@ tibble(degree_n = degree_n,
 ```
 
 ```{r degreeExercise}
-## Plot degree distribution but without loops and only considering edges that are ingoing the nodes
+## Plot degree distribution but without loops and only considering 
+## edges that are ingoing the nodes
 ```
 
 #### Edges Attributes
